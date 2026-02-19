@@ -136,6 +136,12 @@
   </style>
 </head>
 <body>
+  <!-- Silent audio element: tricks iOS into "playback" audio session so
+       Web Audio API plays through speaker and ignores the silent switch -->
+  <audio id="silentAudio" loop playsinline preload="auto"
+    src="data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjU0AAAAAAAAAAAAAAAAJAAAAAAAAAAAAnHBOVEAAAAAAAAAAAAAAAAAAAAAA//tQxAADB8AhSmxhIADWCDd/AAAB+gAAA/QYgAA=">
+  </audio>
+
   <h1>Repeat Timer</h1>
 
   <div class="timer-display" id="display">0:30</div>
@@ -163,6 +169,7 @@
 
     let audioCtx  = null;
     let running   = false;
+    const silentAudio = document.getElementById('silentAudio');
     let tickTimer = null;
     let remaining = 0;
     let cycles    = 0;
@@ -175,9 +182,14 @@
       return audioCtx;
     }
 
-    // iOS requires a silent buffer to be played during a user gesture to fully
-    // unlock the AudioContext. Without this, scheduled future sounds are silent.
+    // iOS audio unlock:
+    // 1. Play the silent <audio> element — this sets the iOS audio session to
+    //    "playback" category, which ignores the silent switch and uses speaker.
+    // 2. Play a silent Web Audio buffer — this fully activates the AudioContext.
     function unlockAudio() {
+      // Start (or resume) the silent looping audio to hold the audio session open
+      silentAudio.play().catch(() => {});
+
       const ctx = getAudioCtx();
       const buf = ctx.createBuffer(1, 1, 22050);
       const src = ctx.createBufferSource();
@@ -290,6 +302,7 @@
 
     function stop() {
       running = false;
+      silentAudio.pause();
       if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
 
       mainBtn.textContent  = 'Start';
