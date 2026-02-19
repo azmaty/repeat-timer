@@ -108,6 +108,19 @@
       color: #c0c0e0;
     }
 
+    .btn-test {
+      width: 100%;
+      padding: 0.6rem;
+      border: 1px solid #3a3a5c;
+      border-radius: 10px;
+      background: transparent;
+      color: #6060a0;
+      font-size: 0.85rem;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+    }
+    .btn-test:active { opacity: 0.6; }
+
     .status {
       font-size: 0.8rem;
       color: #6060a0;
@@ -134,6 +147,7 @@
     </div>
 
     <button class="btn btn-start" id="mainBtn">Start</button>
+    <button class="btn-test" id="testBtn">🔔 Test sound</button>
 
     <div class="cycle-count" id="cycleCount"></div>
     <div class="status" id="status">Set your interval and press Start</div>
@@ -143,6 +157,7 @@
     const displayEl  = document.getElementById('display');
     const durationEl = document.getElementById('duration');
     const mainBtn    = document.getElementById('mainBtn');
+    const testBtn    = document.getElementById('testBtn');
     const statusEl   = document.getElementById('status');
     const cycleEl    = document.getElementById('cycleCount');
 
@@ -289,6 +304,13 @@
     }
 
     mainBtn.addEventListener('click', () => running ? stop() : start());
+
+    testBtn.addEventListener('click', () => {
+      unlockAudio();
+      playBeeps();
+      statusEl.textContent = 'Testing sound…';
+      setTimeout(() => { statusEl.textContent = running ? 'Running…' : 'Set your interval and press Start'; }, 1000);
+    });
 
     // Keep display in sync when user changes the duration while stopped
     durationEl.addEventListener('input', () => {
