@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Repeat Timer</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1a1a2e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Timer">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f1a;
+      color: #e0e0f0;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2rem;
+      padding: 2rem;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #a0a0c0;
+    }
+
+    .timer-display {
+      font-size: clamp(5rem, 20vw, 9rem);
+      font-weight: 200;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+      line-height: 1;
+      transition: color 0.3s;
+    }
+
+    .timer-display.beeping {
+      color: #7c6af7;
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.2rem;
+      width: 100%;
+      max-width: 320px;
+    }
+
+    .duration-row {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      width: 100%;
+    }
+
+    label {
+      font-size: 0.85rem;
+      color: #8080a0;
+      white-space: nowrap;
+    }
+
+    input[type="number"] {
+      flex: 1;
+      background: #1e1e35;
+      border: 1px solid #3a3a5c;
+      border-radius: 10px;
+      color: #e0e0f0;
+      font-size: 1.2rem;
+      padding: 0.6rem 1rem;
+      text-align: center;
+      outline: none;
+      transition: border-color 0.2s;
+      -moz-appearance: textfield;
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+    input[type="number"]:focus { border-color: #7c6af7; }
+
+    .btn {
+      width: 100%;
+      padding: 1rem;
+      border: none;
+      border-radius: 14px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      letter-spacing: 0.04em;
+    }
+    .btn:active { transform: scale(0.97); }
+
+    .btn-start {
+      background: #7c6af7;
+      color: #fff;
+    }
+    .btn-stop {
+      background: #3a3a5c;
+      color: #c0c0e0;
+    }
+
+    .status {
+      font-size: 0.8rem;
+      color: #6060a0;
+      min-height: 1.2em;
+      text-align: center;
+    }
+
+    .cycle-count {
+      font-size: 0.9rem;
+      color: #7c6af7;
+      min-height: 1.4em;
+    }
+  </style>
+</head>
+<body>
+  <h1>Repeat Timer</h1>
+
+  <div class="timer-display" id="display">0:30</div>
+
+  <div class="controls">
+    <div class="duration-row">
+      <label for="duration">Interval (seconds)</label>
+      <input type="number" id="duration" min="1" max="3600" value="30">
+    </div>
+
+    <button class="btn btn-start" id="mainBtn">Start</button>
+
+    <div class="cycle-count" id="cycleCount"></div>
+    <div class="status" id="status">Set your interval and press Start</div>
+  </div>
+
+  <script>
+    const displayEl  = document.getElementById('display');
+    const durationEl = document.getElementById('duration');
+    const mainBtn    = document.getElementById('mainBtn');
+    const statusEl   = document.getElementById('status');
+    const cycleEl    = document.getElementById('cycleCount');
+
+    let audioCtx  = null;
+    let running   = false;
+    let tickTimer = null;
+    let remaining = 0;
+    let cycles    = 0;
+
+    // ── Audio ─────────────────────────────────────────────────────────────────
+
+    function getAudioCtx() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    function beep(freq, startTime, duration) {
+      const ctx  = getAudioCtx();
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.type      = 'sine';
+      osc.frequency.setValueAtTime(freq, startTime);
+
+      // Quick fade-in / fade-out to avoid clicks
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.7, startTime + 0.01);
+      gain.gain.setValueAtTime(0.7, startTime + duration - 0.02);
+      gain.gain.linearRampToValueAtTime(0, startTime + duration);
+
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    }
+
+    function playBeeps() {
+      const ctx   = getAudioCtx();
+      const now   = ctx.currentTime;
+      const dur   = 0.18;   // seconds per beep
+      const gap   = 0.13;   // gap between beeps
+      const freq  = 880;    // A5
+
+      beep(freq, now,                 dur);
+      beep(freq, now + dur + gap,     dur);
+
+      // Return how long to wait before restarting countdown
+      return (dur + gap + dur) * 1000 + 100; // ms
+    }
+
+    // ── Timer logic ───────────────────────────────────────────────────────────
+
+    function formatTime(secs) {
+      const m = Math.floor(secs / 60);
+      const s = secs % 60;
+      return m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `0:${String(s).padStart(2, '0')}`;
+    }
+
+    function updateDisplay() {
+      displayEl.textContent = formatTime(remaining);
+    }
+
+    function startCycle() {
+      if (!running) return;
+
+      remaining = parseInt(durationEl.value, 10) || 30;
+      updateDisplay();
+      displayEl.classList.remove('beeping');
+
+      tickTimer = setInterval(() => {
+        remaining -= 1;
+        updateDisplay();
+
+        if (remaining <= 0) {
+          clearInterval(tickTimer);
+          tickTimer = null;
+          onExpire();
+        }
+      }, 1000);
+    }
+
+    function onExpire() {
+      if (!running) return;
+
+      displayEl.classList.add('beeping');
+      cycles += 1;
+      cycleEl.textContent = `Cycle ${cycles} complete`;
+      statusEl.textContent = 'Beeping…';
+
+      const delay = playBeeps();
+
+      setTimeout(() => {
+        if (!running) return;
+        statusEl.textContent = 'Running…';
+        startCycle();
+      }, delay);
+    }
+
+    function start() {
+      if (running) return;
+      running = true;
+      cycles  = 0;
+      cycleEl.textContent = '';
+
+      // Resume AudioContext on user gesture
+      getAudioCtx();
+
+      mainBtn.textContent  = 'Stop';
+      mainBtn.className    = 'btn btn-stop';
+      durationEl.disabled  = true;
+      statusEl.textContent = 'Running…';
+
+      startCycle();
+    }
+
+    function stop() {
+      running = false;
+      if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+
+      mainBtn.textContent  = 'Start';
+      mainBtn.className    = 'btn btn-start';
+      durationEl.disabled  = false;
+      statusEl.textContent = 'Stopped';
+      displayEl.classList.remove('beeping');
+
+      // Reset display to configured duration
+      remaining = parseInt(durationEl.value, 10) || 30;
+      updateDisplay();
+    }
+
+    mainBtn.addEventListener('click', () => running ? stop() : start());
+
+    // Keep display in sync when user changes the duration while stopped
+    durationEl.addEventListener('input', () => {
+      if (!running) {
+        remaining = parseInt(durationEl.value, 10) || 0;
+        updateDisplay();
+      }
+    });
+
+    // Initial display
+    remaining = parseInt(durationEl.value, 10) || 30;
+    updateDisplay();
+
+    // ── Service Worker ────────────────────────────────────────────────────────
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
