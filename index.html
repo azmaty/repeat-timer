@@ -160,6 +160,18 @@
       return audioCtx;
     }
 
+    // iOS requires a silent buffer to be played during a user gesture to fully
+    // unlock the AudioContext. Without this, scheduled future sounds are silent.
+    function unlockAudio() {
+      const ctx = getAudioCtx();
+      const buf = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
+      ctx.resume();
+    }
+
     function beep(freq, startTime, duration) {
       const ctx  = getAudioCtx();
       const osc  = ctx.createOscillator();
@@ -183,16 +195,17 @@
 
     function playBeeps() {
       const ctx   = getAudioCtx();
-      const now   = ctx.currentTime;
-      const dur   = 0.18;   // seconds per beep
-      const gap   = 0.13;   // gap between beeps
+      // Add a small offset so the first beep isn't clipped on iOS
+      const now   = ctx.currentTime + 0.05;
+      const dur   = 0.20;   // seconds per beep
+      const gap   = 0.15;   // gap between beeps
       const freq  = 880;    // A5
 
       beep(freq, now,                 dur);
       beep(freq, now + dur + gap,     dur);
 
       // Return how long to wait before restarting countdown
-      return (dur + gap + dur) * 1000 + 100; // ms
+      return (0.05 + dur + gap + dur) * 1000 + 150; // ms
     }
 
     // ── Timer logic ───────────────────────────────────────────────────────────
@@ -249,8 +262,8 @@
       cycles  = 0;
       cycleEl.textContent = '';
 
-      // Resume AudioContext on user gesture
-      getAudioCtx();
+      // Unlock AudioContext on user gesture (critical for iOS)
+      unlockAudio();
 
       mainBtn.textContent  = 'Stop';
       mainBtn.className    = 'btn btn-stop';
